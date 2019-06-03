@@ -326,7 +326,113 @@ OtherTransferCount         : 25010
 C:\PS> Get-SystemProcessInformation -ProcName note
 ```
 
+
+### Get-OSTokenInformation
+
+Get-OSTokenInformation uses a variety of API's to pull in all (accessible) user tokens and queries them for details.
+
+```
+# Return full token listing
+C:\PS> $OsTokens = Get-OSTokenInformation
+
+C:\PS> $OsTokens.Count
+136
+
+C:\PS> $OsTokens[10]
+
+PassMustChange      : N/A
+ProcessCompany      : Microsoft Corporation
+AuthPackage         : NTLM
+TokenType           : TokenPrimary
+PID                 : 5876
+LastSuccessfulLogon : N/A
+Session             : 1
+LastFailedLogon     : N/A
+ProcessPath         : C:\Windows\system32\backgroundTaskHost.exe
+LogonServer         : MSEDGEWIN10
+Sid                 : S-1-5-21-4233833229-2203495600-2027003190-1000
+ProcessAuthenticode : Valid
+User                : MSEDGEWIN10\IEUser
+LoginTime           : 4/16/2018 9:52:20 PM
+TokenPrivilegeCount : 5
+TokenPrivileges     : {SeShutdownPrivilege, SeChangeNotifyPrivilege, SeUndockPrivilege,
+                      SeIncreaseWorkingSetPrivilege...}
+Process             : backgroundTaskHost
+PassLastSet         : 10/17/2017 6:13:19 PM
+ImpersonationType   : N/A
+TID                 : Primary
+TokenGroups         : {MSEDGEWIN10\IEUser, MSEDGEWIN10\None, Everyone, NT AUTHORITY\Local account and member of
+                      Administrators group...}
+LogonType           : Interactive
+GroupCount          : 14
+Elevated            : No
+
+# Return brief token listing
+C:\PS> Get-OSTokenInformation -Brief
+
+Process               PID TID     Elevated ImpersonationType     User
+-------               --- ---     -------- -----------------     ----
+ApplicationFrameHost 5820 Primary No       N/A                   MSEDGEWIN10\IEUser
+backgroundTaskHost   1076 Primary No       N/A                   MSEDGEWIN10\IEUser
+backgroundTaskHost   1960 Primary No       N/A                   MSEDGEWIN10\IEUser
+backgroundTaskHost   7860 Primary No       N/A                   MSEDGEWIN10\IEUser
+CompatTelRunner       680 Primary Yes      N/A                   NT AUTHORITY\SYSTEM
+CompatTelRunner      6916 Primary Yes      N/A                   NT AUTHORITY\SYSTEM
+CompatTelRunner      8488 Primary Yes      N/A                   NT AUTHORITY\SYSTEM
+svchost              3572 Primary Yes      N/A                   NT AUTHORITY\SYSTEM
+svchost              3900 Primary Yes      N/A                   NT AUTHORITY\SYSTEM
+svchost              4292 Primary Yes      N/A                   NT AUTHORITY\SYSTEM
+svchost              4292 144     No       SecurityImpersonation MSEDGEWIN10\IEUser
+svchost              4292 7704    No       SecurityImpersonation MSEDGEWIN10\IEUser
+svchost              4292 1404    No       SecurityImpersonation MSEDGEWIN10\IEUser
+svchost              4464 Primary No       N/A                   MSEDGEWIN10\IEUser
+svchost              4556 Primary No       N/A                   MSEDGEWIN10\IEUser
+[... Snip ...]
+```
+
+### Native-HardLink
+
+This is a proof-of-concept for NT hard links. There are some advantages, from an offensive perspective, to using NtSetInformationFile to create hard links (as opposed to mklink/CreateHardLink). NtSetInformationFile allows us link to files we don’t have write access to.
+
+```
+PS C:\> Native-HardLink -Link C:\Some\Path\Hard.Link -Target C:\Some\Path\Target.file
+True
+```
+
 ## pwnd
+
+### Start-Hollow
+
+This is a proof-of-concept for process hollowing. There is nothing new here except maybe the use of NtCreateProcessEx which has some advantages in that it offers a convenient way to set a parent process and avoids the bothersome Get/SetThreadContext. On the flipside CreateRemoteThreadEx/NtCreateThreadEx are pretty suspicious API's.
+
+```
+# Create a Hollow from a PE on disk with explorer as the parent.
+# x64 Win10 RS4
+C:\PS> Start-Hollow -Sponsor C:\Windows\System32\notepad.exe -Hollow C:\Some\PE.exe -ParentPID 8304 -Verbose
+VERBOSE: [?] A place where souls may mend your ailing mind..
+VERBOSE: [+] Opened file for access
+VERBOSE: [+] Created section from file handle
+VERBOSE: [+] Opened handle to the parent => explorer
+VERBOSE: [+] Created process from section
+VERBOSE: [+] Acquired PBI
+VERBOSE: [+] Sponsor architecture is x64
+VERBOSE: [+] Sponsor ImageBaseAddress => 7FF69E9F0000
+VERBOSE: [+] Allocated space for the Hollow process
+VERBOSE: [+] Duplicated Hollow PE headers to the Sponsor
+VERBOSE: [+] Duplicated .text section to the Sponsor
+VERBOSE: [+] Duplicated .rdata section to the Sponsor
+VERBOSE: [+] Duplicated .data section to the Sponsor
+VERBOSE: [+] Duplicated .pdata section to the Sponsor
+VERBOSE: [+] Duplicated .rsrc section to the Sponsor
+VERBOSE: [+] Duplicated .reloc section to the Sponsor
+VERBOSE: [+] New process ImageBaseAddress => 40000000
+VERBOSE: [+] Created Hollow process parameters
+VERBOSE: [+] Allocated memory in the Hollow
+VERBOSE: [+] Process parameters duplicated into the Hollow
+VERBOSE: [+] Rewrote Hollow->PEB->pProcessParameters
+VERBOSE: [+] Created Hollow main thread..
+True
+```
 
 ### Start-Eidolon
 
